@@ -17,6 +17,9 @@ BOT_COMMANDS = (
     {"command": "query", "description": "实时查询当前价格差"},
     {"command": "chatid", "description": "显示当前 chat_id 和 user_id"},
     {"command": "setalert", "description": "将当前会话设为预警接收目标"},
+    {"command": "notifytime", "description": "设置每日通知时间段"},
+    {"command": "interval", "description": "设置检查频率"},
+    {"command": "settings", "description": "查看通知配置"},
     {"command": "status", "description": "查看预警目标配置"},
 )
 

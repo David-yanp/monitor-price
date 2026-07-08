@@ -53,6 +53,9 @@ The service runs two concurrent tasks:
 - `/chatid` replies with the current Telegram chat_id and user_id
 - `/setalert` saves the current chat as the alert target
 - `/status` shows the active alert chat_id
+- `/notifytime 08:00-23:30` sets the daily alert notification window
+- `/interval 15m` sets the global check interval
+- `/settings` shows the alert chat, notification window, check interval, and threshold
 
 Telegram Bot API cannot list every chat or discover a chat_id only from the bot token. The bot learns chat_id values only after a user, group, or channel sends an update to it. Recommended setup:
 
@@ -124,6 +127,10 @@ Per-exchange prices are stored in `price_check_sources`.
 The service reads Binance and OKX C2C prices concurrently. An alert is sent only when at least one exchange has an absolute price difference greater than `PRICE_DIFF_THRESHOLD`.
 
 Duplicate alerts are suppressed per exchange. If the current alert diff, rounded to 4 decimal places, is the same as the last sent alert diff for that exchange, the service records the check but does not send another Telegram alert.
+
+Notification windows are configured at runtime with `/notifytime HH:MM-HH:MM` and stored in SQLite. The service still checks prices and records data outside the window, but it does not send Telegram alerts or update the last-alert dedupe state. Cross-midnight windows such as `22:00-02:00` are supported.
+
+The check interval can be changed at runtime with `/interval`, for example `/interval 15m` or `/interval 1h`. The new interval is used by the next monitor loop without restarting the service.
 
 ## Tests
 

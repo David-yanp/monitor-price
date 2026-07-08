@@ -8,6 +8,14 @@ from app.alerts import alertable_quotes, diff_key, format_alert, format_snapshot
 from app.bot import BOT_COMMANDS, TelegramBot
 from app.config import Settings, load_settings
 from app.prices import PriceService
+from app.runtime_config import (
+    CHECK_INTERVAL_KEY,
+    DEFAULT_NOTIFY_WINDOW,
+    NOTIFY_WINDOW_KEY,
+    format_interval,
+    parse_interval_seconds,
+    parse_notify_window,
+)
 from app.storage import PriceStore
 
 
@@ -30,17 +38,21 @@ class PriceMonitorApp:
 
     async def handle_command(self, chat_id: int, user_id: int | None, text: str) -> str:
         command = text.split(maxsplit=1)[0].split("@", 1)[0].lower()
+        arg_text = text.split(maxsplit=1)[1].strip() if len(text.split(maxsplit=1)) > 1 else ""
         if command in {"/start", "/commands"}:
             return self.format_command_list()
         if command == "/chatid":
             return f"当前 chat_id: {chat_id}\n当前 user_id: {user_id or 'unknown'}"
         if command == "/setalert":
             return await self.set_alert_chat(chat_id, user_id)
+        if command == "/notifytime":
+            return await self.set_notify_window(user_id, arg_text)
+        if command == "/interval":
+            return await self.set_check_interval(user_id, arg_text)
+        if command == "/settings":
+            return await self.format_settings()
         if command == "/status":
-            alert_chat_id = await self.get_alert_chat_id()
-            if alert_chat_id:
-                return f"当前预警 chat_id: {alert_chat_id}"
-            return "当前预警 chat_id: 未配置\n请在需要接收预警的会话里发送 /setalert。"
+            return await self.format_settings(include_hint=True)
         if command != "/query":
             return "未知命令。请发送 /query 查询当前价格差。"
 
@@ -58,6 +70,49 @@ class PriceMonitorApp:
         await self.store.set_setting("telegram_alert_chat_id", str(chat_id))
         return f"已将当前会话设置为预警接收目标。\nchat_id: {chat_id}"
 
+    async def set_notify_window(self, user_id: int | None, raw_value: str) -> str:
+        if not self.can_manage_alerts(user_id):
+            return "没有权限设置通知时间段。请在 TELEGRAM_ADMIN_USER_IDS 中配置你的 Telegram user_id。"
+        if not raw_value:
+            return "用法: /notifytime 08:00-23:30"
+
+        try:
+            notify_window = parse_notify_window(raw_value)
+        except ValueError as exc:
+            return str(exc)
+
+        await self.store.set_setting(NOTIFY_WINDOW_KEY, str(notify_window))
+        return f"已设置每日通知时间段: {notify_window}"
+
+    async def set_check_interval(self, user_id: int | None, raw_value: str) -> str:
+        if not self.can_manage_alerts(user_id):
+            return "没有权限设置检查频率。请在 TELEGRAM_ADMIN_USER_IDS 中配置你的 Telegram user_id。"
+        if not raw_value:
+            return "用法: /interval 15m"
+
+        try:
+            seconds = parse_interval_seconds(raw_value)
+        except ValueError as exc:
+            return str(exc)
+
+        await self.store.set_setting(CHECK_INTERVAL_KEY, str(seconds))
+        return f"已设置检查频率: {format_interval(seconds)}"
+
+    async def format_settings(self, include_hint: bool = False) -> str:
+        alert_chat_id = await self.get_alert_chat_id()
+        notify_window = await self.get_notify_window()
+        interval_seconds = await self.get_check_interval_seconds()
+
+        lines = [
+            f"当前预警 chat_id: {alert_chat_id or '未配置'}",
+            f"每日通知时间段: {notify_window}",
+            f"检查频率: {format_interval(interval_seconds)}",
+            f"阈值: {self.settings.price_diff_threshold:.4f}",
+        ]
+        if include_hint and not alert_chat_id:
+            lines.append("请在需要接收预警的会话里发送 /setalert。")
+        return "\n".join(lines)
+
     def format_command_list(self) -> str:
         lines = ["当前支持的命令:"]
         for item in BOT_COMMANDS:
@@ -74,10 +129,27 @@ class PriceMonitorApp:
             return self.settings.telegram_chat_id
         return await self.store.get_setting("telegram_alert_chat_id")
 
+    async def get_notify_window(self):
+        raw_value = await self.store.get_setting(NOTIFY_WINDOW_KEY)
+        try:
+            return parse_notify_window(raw_value or DEFAULT_NOTIFY_WINDOW)
+        except ValueError:
+            return parse_notify_window(DEFAULT_NOTIFY_WINDOW)
+
+    async def get_check_interval_seconds(self) -> int:
+        raw_value = await self.store.get_setting(CHECK_INTERVAL_KEY)
+        if raw_value is None:
+            return self.settings.check_interval_seconds
+        try:
+            seconds = int(raw_value)
+        except ValueError:
+            return self.settings.check_interval_seconds
+        return seconds if seconds > 0 else self.settings.check_interval_seconds
+
     async def run_monitor_loop(self) -> None:
         while True:
             await self.run_once()
-            await asyncio.sleep(self.settings.check_interval_seconds)
+            await asyncio.sleep(await self.get_check_interval_seconds())
 
     async def run_once(self) -> None:
         alert_sent = False
@@ -86,7 +158,10 @@ class PriceMonitorApp:
             changed_quotes = await self.changed_alert_quotes(snapshot)
             if changed_quotes:
                 alert_chat_id = await self.get_alert_chat_id()
-                if alert_chat_id:
+                notify_window = await self.get_notify_window()
+                if not notify_window.contains():
+                    logger.info("Alert threshold exceeded, but current time is outside notify window %s.", notify_window)
+                elif alert_chat_id:
                     await self.bot.send_message(
                         alert_chat_id,
                         format_alert(snapshot, self.settings.price_diff_threshold, changed_quotes),

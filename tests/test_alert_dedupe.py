@@ -51,6 +51,39 @@ class AlertDedupeTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(tuple(quote.source for quote in changed), ("binance",))
 
+    async def test_silent_window_does_not_mark_alert_as_sent(self) -> None:
+        snapshot = PriceSnapshot(
+            checked_at=datetime.now(timezone.utc),
+            usd_cny_rate=7.20,
+            quotes=(ExchangeQuote(source="binance", price=7.27415, diff=0.07415),),
+        )
+
+        class FakePriceService:
+            async def fetch_snapshot(self):
+                return snapshot
+
+            async def close(self):
+                return None
+
+        class NeverNotifyWindow:
+            def contains(self):
+                return False
+
+            def __str__(self):
+                return "test-never"
+
+        await self.app.price_service.close()
+        self.app.price_service = FakePriceService()
+
+        async def get_notify_window():
+            return NeverNotifyWindow()
+
+        self.app.get_notify_window = get_notify_window
+
+        await self.app.run_once()
+
+        self.assertIsNone(await self.app.store.get_setting("last_alert_diff:binance"))
+
 
 if __name__ == "__main__":
     unittest.main()
