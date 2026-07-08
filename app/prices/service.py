@@ -21,21 +21,34 @@ class PriceService:
         await self._session.close()
 
     async def fetch_snapshot(self) -> PriceSnapshot:
-        c2c_price = await self._fetch_c2c_with_fallback()
-        usd_cny_rate = await asyncio.wait_for(
-            fetch_google_usd_cny_rate(self._session),
-            timeout=self._timeout_seconds,
+        c2c_prices_task = asyncio.create_task(self._fetch_all_c2c_prices())
+        usd_cny_task = asyncio.create_task(
+            asyncio.wait_for(
+                fetch_google_usd_cny_rate(self._session),
+                timeout=self._timeout_seconds,
+            )
         )
-        return PriceSnapshot.create(c2c_price.source, c2c_price.price, usd_cny_rate)
+        c2c_prices, usd_cny_rate = await asyncio.gather(c2c_prices_task, usd_cny_task)
+        return PriceSnapshot.create(c2c_prices, usd_cny_rate)
 
-    async def _fetch_c2c_with_fallback(self) -> C2CPrice:
+    async def _fetch_all_c2c_prices(self) -> tuple[C2CPrice, ...]:
+        providers = (fetch_binance_c2c_price, fetch_okx_c2c_price)
+        results = await asyncio.gather(
+            *(
+                asyncio.wait_for(provider(self._session, self._p2p_sample_size), timeout=self._timeout_seconds)
+                for provider in providers
+            ),
+            return_exceptions=True,
+        )
+
+        prices: list[C2CPrice] = []
         errors: list[str] = []
-        for provider in (fetch_binance_c2c_price, fetch_okx_c2c_price):
-            try:
-                return await asyncio.wait_for(
-                    provider(self._session, self._p2p_sample_size),
-                    timeout=self._timeout_seconds,
-                )
-            except Exception as exc:
-                errors.append(f"{provider.__name__}: {exc}")
+        for provider, result in zip(providers, results):
+            if isinstance(result, C2CPrice):
+                prices.append(result)
+            else:
+                errors.append(f"{provider.__name__}: {result}")
+
+        if prices:
+            return tuple(prices)
         raise RuntimeError("; ".join(errors))

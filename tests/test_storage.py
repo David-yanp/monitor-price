@@ -5,7 +5,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from app.models import PriceSnapshot
+from app.models import ExchangeQuote, PriceSnapshot
 from app.storage import PriceStore
 
 
@@ -16,10 +16,11 @@ class StorageTests(unittest.TestCase):
             store = PriceStore(db_path)
             snapshot = PriceSnapshot(
                 checked_at=datetime.now(timezone.utc),
-                c2c_source="binance",
-                c2c_price=7.25,
                 usd_cny_rate=7.20,
-                diff=0.05,
+                quotes=(
+                    ExchangeQuote(source="binance", price=7.25, diff=0.05),
+                    ExchangeQuote(source="okx", price=7.24, diff=0.04),
+                ),
             )
 
             async def run() -> None:
@@ -34,6 +35,11 @@ class StorageTests(unittest.TestCase):
                 ).fetchone()
 
             self.assertEqual(row, ("binance", 7.25, 7.20, 0.05, 0.04, 1, None))
+            rows = conn.execute(
+                "SELECT source, c2c_price, diff FROM price_check_sources ORDER BY source"
+            ).fetchall()
+
+            self.assertEqual(rows, [("binance", 7.25, 0.05), ("okx", 7.24, 0.04)])
 
     def test_store_records_error(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

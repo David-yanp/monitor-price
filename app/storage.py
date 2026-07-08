@@ -20,6 +20,16 @@ CREATE TABLE IF NOT EXISTS price_checks (
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS price_check_sources (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    price_check_id INTEGER NOT NULL,
+    source TEXT NOT NULL,
+    c2c_price REAL NOT NULL,
+    diff REAL NOT NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (price_check_id) REFERENCES price_checks(id)
+);
+
 CREATE TABLE IF NOT EXISTS app_settings (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL,
@@ -56,7 +66,7 @@ class PriceStore:
         alert_sent: bool,
     ) -> None:
         with sqlite3.connect(self.database_path) as conn:
-            conn.execute(
+            cursor = conn.execute(
                 """
                 INSERT INTO price_checks (
                     checked_at, c2c_source, c2c_price, usd_cny_rate, diff, threshold, alert_sent, error
@@ -70,6 +80,18 @@ class PriceStore:
                     snapshot.diff,
                     threshold,
                     1 if alert_sent else 0,
+                ),
+            )
+            price_check_id = int(cursor.lastrowid)
+            conn.executemany(
+                """
+                INSERT INTO price_check_sources (
+                    price_check_id, source, c2c_price, diff
+                ) VALUES (?, ?, ?, ?)
+                """,
+                (
+                    (price_check_id, quote.source, quote.price, quote.diff)
+                    for quote in snapshot.quotes
                 ),
             )
             conn.commit()

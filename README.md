@@ -1,6 +1,6 @@
 # Crypto Price Monitor
 
-Async Python service for monitoring the CNY/USDT C2C price against the Google USD/CNY rate.
+Async Python service for monitoring Binance/OKX CNY/USDT C2C prices against the Google USD/CNY rate.
 
 ## Runtime Layout
 
@@ -117,6 +117,13 @@ On startup the service calls Telegram `deleteMyCommands` and `setMyCommands`, so
 ## Data
 
 SQLite defaults to `/var/lib/monitor-price/prices.db`. Each monitor run records successful checks and failures in `price_checks`.
+Per-exchange prices are stored in `price_check_sources`.
+
+## Alerts
+
+The service reads Binance and OKX C2C prices concurrently. An alert is sent only when at least one exchange has an absolute price difference greater than `PRICE_DIFF_THRESHOLD`.
+
+Duplicate alerts are suppressed per exchange. If the current alert diff, rounded to 4 decimal places, is the same as the last sent alert diff for that exchange, the service records the check but does not send another Telegram alert.
 
 ## Tests
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from app.alerts import format_alert, format_snapshot, should_alert
+from app.alerts import alertable_quotes, diff_key, format_alert, format_snapshot
 from app.bot import BOT_COMMANDS, TelegramBot
 from app.config import Settings, load_settings
 from app.prices import PriceService
@@ -82,13 +82,15 @@ class PriceMonitorApp:
         alert_sent = False
         try:
             snapshot = await self.price_service.fetch_snapshot()
-            if should_alert(snapshot, self.settings.price_diff_threshold):
+            changed_quotes = await self.changed_alert_quotes(snapshot)
+            if changed_quotes:
                 alert_chat_id = await self.get_alert_chat_id()
                 if alert_chat_id:
                     await self.bot.send_message(
                         alert_chat_id,
-                        format_alert(snapshot, self.settings.price_diff_threshold),
+                        format_alert(snapshot, self.settings.price_diff_threshold, changed_quotes),
                     )
+                    await self.mark_alerted(changed_quotes)
                     alert_sent = True
                 else:
                     logger.warning("Alert threshold exceeded, but TELEGRAM_CHAT_ID is not configured.")
@@ -99,9 +101,8 @@ class PriceMonitorApp:
                 alert_sent,
             )
             logger.info(
-                "Recorded price check: source=%s c2c=%.4f usd_cny=%.4f diff=%.4f alert=%s",
-                snapshot.c2c_source,
-                snapshot.c2c_price,
+                "Recorded price check: sources=%s usd_cny=%.4f max_diff=%.4f alert=%s",
+                ",".join(quote.source for quote in snapshot.quotes),
                 snapshot.usd_cny_rate,
                 snapshot.diff,
                 alert_sent,
@@ -109,6 +110,19 @@ class PriceMonitorApp:
         except Exception as exc:
             logger.exception("Price monitor check failed.")
             await self.store.record_error(self.settings.price_diff_threshold, str(exc))
+
+    async def changed_alert_quotes(self, snapshot):
+        changed = []
+        for quote in alertable_quotes(snapshot, self.settings.price_diff_threshold):
+            current_key = diff_key(quote.diff)
+            previous_key = await self.store.get_setting(f"last_alert_diff:{quote.source}")
+            if previous_key != current_key:
+                changed.append(quote)
+        return tuple(changed)
+
+    async def mark_alerted(self, quotes) -> None:
+        for quote in quotes:
+            await self.store.set_setting(f"last_alert_diff:{quote.source}", diff_key(quote.diff))
 
     async def run(self) -> None:
         await self.store.init()
