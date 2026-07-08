@@ -44,3 +44,5 @@ uwsgi.log
 
 #Others
 AGENTS.md
+# Local deploy scripts
+deploy-local.sh
