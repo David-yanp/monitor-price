@@ -20,8 +20,11 @@ class AlertFormatTests(unittest.TestCase):
 
         self.assertIn("当前价格差", text)
         self.assertIn("Google USD/CNY: 6.7942", text)
-        self.assertIn("BINANCE: 6.7200 | 差 0.0742 | 超过 +0.0342", text)
-        self.assertIn("OKX: 6.7300 | 差 0.0641 | 超过 +0.0241", text)
+        self.assertIn("```", text)
+        self.assertIn("交易所        C2C      价差  状态", text)
+        self.assertIn("BINANCE    6.7200    0.0742  ALERT", text)
+        self.assertIn("OKX        6.7300    0.0641  ALERT", text)
+        self.assertNotIn("超过 +", text)
         self.assertNotIn("------", text)
 
     def test_format_alert_puts_trigger_summary_first(self) -> None:

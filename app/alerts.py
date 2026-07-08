@@ -26,14 +26,13 @@ def format_snapshot(snapshot: PriceSnapshot, threshold: float) -> str:
         f"Google USD/CNY: {snapshot.usd_cny_rate:.4f}",
         f"阈值: {threshold:.4f}",
         "",
+        "```",
+        "交易所        C2C      价差  状态",
     ]
     for quote in snapshot.quotes:
-        status = "超过" if quote.diff > threshold else "正常"
-        overage = max(quote.diff - threshold, 0)
-        lines.append(
-            f"{quote.source.upper()}: {quote.price:.4f} | 差 {quote.diff:.4f} | {status}"
-            f"{f' +{overage:.4f}' if overage else ''}"
-        )
+        status = "ALERT" if quote.diff > threshold else "OK"
+        lines.append(f"{quote.source.upper():<8} {quote.price:>8.4f}  {quote.diff:>8.4f}  {status}")
+    lines.append("```")
     return "\n".join(lines)
 
 
