@@ -6,6 +6,8 @@ import os
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+DEFAULT_CONFIG_DIR = Path("/etc/monitor-price")
+DEFAULT_DATA_DIR = Path("/var/lib/monitor-price")
 
 
 def _load_dotenv(path: Path) -> dict[str, str]:
@@ -39,17 +41,21 @@ class Settings:
 
 
 def load_settings(base_dir: Path = BASE_DIR) -> Settings:
-    dotenv = _load_dotenv(base_dir / ".env")
-    token_path = base_dir / "bot.txt"
+    config_dir = Path(os.getenv("MONITOR_PRICE_CONFIG_DIR") or DEFAULT_CONFIG_DIR)
+    if not config_dir.exists():
+        config_dir = base_dir
+
+    dotenv = _load_dotenv(config_dir / ".env")
+    token_path = Path(_get_value(dotenv, "BOT_TOKEN_FILE", str(config_dir / "bot.txt")))
 
     if not token_path.exists():
-        raise RuntimeError("Missing bot.txt with Telegram bot token.")
+        raise RuntimeError(f"Missing Telegram bot token file: {token_path}")
 
     bot_token = token_path.read_text(encoding="utf-8").strip()
     if not bot_token:
-        raise RuntimeError("bot.txt is empty.")
+        raise RuntimeError(f"Telegram bot token file is empty: {token_path}")
 
-    database_path = Path(_get_value(dotenv, "DATABASE_PATH", "prices.db"))
+    database_path = Path(_get_value(dotenv, "DATABASE_PATH", str(DEFAULT_DATA_DIR / "prices.db")))
     if not database_path.is_absolute():
         database_path = base_dir / database_path
 

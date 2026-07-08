@@ -1,6 +1,6 @@
 [uwsgi]
-chdir = /home/monitor_price
-virtualenv = /home/monitor_price/.venv
+chdir = /opt/monitor-price
+virtualenv = /opt/monitor-price/.venv
 plugin = python3
 module = app.uwsgi_entry:application
 
@@ -15,4 +15,4 @@ gid = www-data
 
 http-socket = 127.0.0.1:9099
 
-attach-daemon2 = cmd=/home/monitor_price/.venv/bin/python -m app.main,control=true
+attach-daemon2 = cmd=/opt/monitor-price/.venv/bin/python -m app.main,control=true

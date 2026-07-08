@@ -2,6 +2,17 @@
 
 Async Python service for monitoring the CNY/USDT C2C price against the Google USD/CNY rate.
 
+## Runtime Layout
+
+Recommended production layout:
+
+- code: `/opt/monitor-price`, read-only for the service user
+- config: `/etc/monitor-price`, stores `.env` and `bot.txt`
+- data: `/var/lib/monitor-price`, stores `prices.db`
+- process user: `www-data`
+
+This keeps Git operations, secrets, runtime data, and the service identity separated.
+
 ## Setup
 
 ```bash
@@ -15,13 +26,15 @@ Optional `.env` values:
 ```bash
 TELEGRAM_CHAT_ID=your_alert_chat_id
 TELEGRAM_ADMIN_USER_IDS=your_telegram_user_id
+DATABASE_PATH=/var/lib/monitor-price/prices.db
+BOT_TOKEN_FILE=/etc/monitor-price/bot.txt
 ```
 
-`bot.txt` must contain the Telegram bot token.
+`bot.txt` must contain the Telegram bot token. In production, place it at `/etc/monitor-price/bot.txt`.
 
 `TELEGRAM_CHAT_ID` is optional. You can start the bot, send `/setalert` from Telegram, and the bot will save the current chat as the alert target in SQLite.
 
-## Run
+## Run Locally
 
 ```bash
 .venv/bin/python -m app.main
@@ -52,21 +65,41 @@ For groups, add the bot to the group first. If privacy mode blocks regular messa
 
 ## systemd + uWSGI
 
-Install uWSGI from system packages and Python dependencies into the virtual environment:
+Install uWSGI from system packages:
 
 ```bash
 sudo apt install uwsgi uwsgi-plugin-python3
-.venv/bin/python -m pip install -r requirements.txt
 ```
 
-Install the systemd service:
+Install code and dependencies:
 
 ```bash
-sudo chown -R www-data:www-data /home/monitor_price
-sudo find /home/monitor_price -type d -exec chmod 750 {} \;
-sudo find /home/monitor_price -type f -exec chmod 640 {} \;
-sudo chmod 750 /home/monitor_price/.venv/bin/*
-sudo cp deploy/monitor-price.service /etc/systemd/system/monitor-price.service
+sudo mkdir -p /opt/monitor-price /etc/monitor-price /var/lib/monitor-price
+sudo rsync -a --delete --exclude .git --exclude .venv --exclude bot.txt --exclude prices.db ./ /opt/monitor-price/
+sudo python3 -m venv /opt/monitor-price/.venv
+sudo /opt/monitor-price/.venv/bin/python -m pip install -r /opt/monitor-price/requirements.txt
+```
+
+Install config and runtime data:
+
+```bash
+sudo cp /opt/monitor-price/.env.example /etc/monitor-price/.env
+sudo install -m 0640 -o root -g www-data bot.txt /etc/monitor-price/bot.txt
+sudo chown -R www-data:www-data /var/lib/monitor-price
+sudo chmod 750 /var/lib/monitor-price
+```
+
+Install service files:
+
+```bash
+sudo cp /opt/monitor-price/deploy/monitor_price.uwsgi.ini.example /etc/monitor-price/monitor_price.uwsgi.ini
+sudo cp /opt/monitor-price/deploy/monitor-price.service.example /etc/systemd/system/monitor-price.service
+sudo chown -R root:root /opt/monitor-price
+sudo find /opt/monitor-price -type d -exec chmod 755 {} \;
+sudo find /opt/monitor-price -type f -exec chmod 644 {} \;
+sudo chown -R root:www-data /etc/monitor-price
+sudo chmod 750 /etc/monitor-price
+sudo chmod 640 /etc/monitor-price/*
 sudo systemctl daemon-reload
 sudo systemctl enable --now monitor-price.service
 ```
@@ -83,7 +116,7 @@ On startup the service calls Telegram `deleteMyCommands` and `setMyCommands`, so
 
 ## Data
 
-SQLite defaults to `prices.db`. Each monitor run records successful checks and failures in `price_checks`.
+SQLite defaults to `/var/lib/monitor-price/prices.db`. Each monitor run records successful checks and failures in `price_checks`.
 
 ## Tests
 

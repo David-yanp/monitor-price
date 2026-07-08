@@ -41,3 +41,6 @@ uwsgi.log
 .vscode/
 *.swp
 *.swo
+
+#Others
+AGENTS.md
