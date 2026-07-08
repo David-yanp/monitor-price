@@ -1,0 +1,19 @@
+[Unit]
+Description=Monitor crypto CNY/USDT price difference
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/home/monitor_price
+EnvironmentFile=-/home/monitor_price/.env
+ExecStart=/usr/bin/uwsgi --ini /home/monitor_price/deploy/monitor_price.uwsgi.ini
+Restart=always
+RestartSec=10
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target
