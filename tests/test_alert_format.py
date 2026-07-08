@@ -20,10 +20,12 @@ class AlertFormatTests(unittest.TestCase):
 
         self.assertIn("当前价格差", text)
         self.assertIn("Google USD/CNY: 6.7942", text)
-        self.assertIn("```", text)
+        self.assertIn("<pre>", text)
+        self.assertIn("</pre>", text)
         self.assertIn("交易所        C2C      价差  状态", text)
         self.assertIn("BINANCE    6.7200    0.0742  ALERT", text)
         self.assertIn("OKX        6.7300    0.0641  ALERT", text)
+        self.assertNotIn("```", text)
         self.assertNotIn("超过 +", text)
         self.assertNotIn("------", text)
 

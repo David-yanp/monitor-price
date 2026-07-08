@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from html import escape
 import logging
 
 from app.alerts import alertable_quotes, diff_key, format_alert, format_snapshot
@@ -48,7 +49,7 @@ class PriceMonitorApp:
             return format_snapshot(snapshot, self.settings.price_diff_threshold)
         except Exception as exc:
             logger.exception("/query failed for chat_id=%s", chat_id)
-            return f"查询失败: {exc}"
+            return f"查询失败: {escape(str(exc))}"
 
     async def set_alert_chat(self, chat_id: int, user_id: int | None) -> str:
         if not self.can_manage_alerts(user_id):

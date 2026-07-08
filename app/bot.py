@@ -104,6 +104,7 @@ class TelegramBot:
         text: str,
     ) -> None:
         payload = {"chat_id": chat_id, "text": text}
+        payload["parse_mode"] = "HTML"
         async with session.post(f"{self.base_url}/sendMessage", json=payload) as response:
             response.raise_for_status()
             data = await response.json()
