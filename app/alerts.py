@@ -20,21 +20,21 @@ def diff_key(diff: float) -> str:
 
 def format_snapshot(snapshot: PriceSnapshot, threshold: float) -> str:
     local_time = snapshot.checked_at.astimezone().strftime("%Y-%m-%d %H:%M:%S %Z")
-    rows = [
-        "交易所   CNY/USDT  价差    状态",
-        "------   --------  ------  --------",
+    lines = [
+        "当前价格差",
+        f"时间: {local_time}",
+        f"Google USD/CNY: {snapshot.usd_cny_rate:.4f}",
+        f"阈值: {threshold:.4f}",
+        "",
     ]
     for quote in snapshot.quotes:
-        status = "ALERT" if quote.diff > threshold else "OK"
-        rows.append(f"{quote.source:<8} {quote.price:>8.4f}  {quote.diff:>6.4f}  {status}")
-
-    return (
-        f"当前价格差查询\n"
-        f"时间: {local_time}\n"
-        f"Google USD/CNY: {snapshot.usd_cny_rate:.4f}\n"
-        f"阈值: {threshold:.4f}\n"
-        f"\n" + "\n".join(rows)
-    )
+        status = "超过" if quote.diff > threshold else "正常"
+        overage = max(quote.diff - threshold, 0)
+        lines.append(
+            f"{quote.source.upper()}: {quote.price:.4f} | 差 {quote.diff:.4f} | {status}"
+            f"{f' +{overage:.4f}' if overage else ''}"
+        )
+    return "\n".join(lines)
 
 
 def format_alert(
@@ -42,5 +42,5 @@ def format_alert(
     threshold: float,
     changed_quotes: Iterable[ExchangeQuote],
 ) -> str:
-    changed_sources = ", ".join(quote.source for quote in changed_quotes)
-    return f"价格偏差预警\n触发交易所: {changed_sources}\n" + format_snapshot(snapshot, threshold)
+    changed_sources = ", ".join(quote.source.upper() for quote in changed_quotes)
+    return f"价格偏差预警: {changed_sources}\n\n" + format_snapshot(snapshot, threshold)
