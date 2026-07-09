@@ -30,7 +30,11 @@ class PriceMonitorApp:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
         self.store = PriceStore(settings.database_path)
-        self.price_service = PriceService(settings.http_timeout_seconds, settings.p2p_sample_size)
+        self.price_service = PriceService(
+            settings.http_timeout_seconds,
+            settings.p2p_sample_size,
+            settings.min_cny_trade_amount,
+        )
         self.bot = TelegramBot(settings.bot_token, self.handle_command)
 
     async def close(self) -> None:

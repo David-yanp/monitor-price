@@ -38,6 +38,7 @@ class Settings:
     price_diff_threshold: float = 0.04
     http_timeout_seconds: float = 12.0
     p2p_sample_size: int = 5
+    min_cny_trade_amount: float = 3000.0
 
 
 def load_settings(base_dir: Path = BASE_DIR) -> Settings:
@@ -71,6 +72,7 @@ def load_settings(base_dir: Path = BASE_DIR) -> Settings:
         price_diff_threshold=float(_get_value(dotenv, "PRICE_DIFF_THRESHOLD", "0.04")),
         http_timeout_seconds=float(_get_value(dotenv, "HTTP_TIMEOUT_SECONDS", "12")),
         p2p_sample_size=int(_get_value(dotenv, "P2P_SAMPLE_SIZE", "5")),
+        min_cny_trade_amount=float(_get_value(dotenv, "MIN_CNY_TRADE_AMOUNT", "3000")),
     )
 
 

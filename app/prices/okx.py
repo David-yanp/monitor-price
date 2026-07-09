@@ -13,6 +13,7 @@ OKX_P2P_URL = "https://www.okx.com/v3/c2c/tradingOrders/books"
 async def fetch_okx_c2c_price(
     session: aiohttp.ClientSession,
     sample_size: int,
+    min_cny_trade_amount: float,
 ) -> C2CPrice:
     params = {
         "quoteCurrency": "CNY",
@@ -38,15 +39,33 @@ async def fetch_okx_c2c_price(
     if not isinstance(raw_items, list):
         raise RuntimeError("OKX P2P returned an unexpected response shape.")
 
+    prices = extract_okx_prices(raw_items, sample_size, min_cny_trade_amount)
+
+    if not prices:
+        raise RuntimeError(f"OKX P2P returned no USDT/CNY prices meeting min {min_cny_trade_amount:g} CNY single-order amount.")
+
+    return C2CPrice(source="okx", price=float(median(prices)))
+
+
+def extract_okx_prices(
+    raw_items: list[object],
+    sample_size: int,
+    min_cny_trade_amount: float,
+) -> list[float]:
     prices: list[float] = []
-    for item in raw_items[:sample_size]:
+    for item in raw_items:
         if not isinstance(item, dict):
             continue
         price = item.get("price") or item.get("quotePrice")
-        if price is not None:
+        max_amount = item.get("quoteMaxAmountPerOrder")
+        try:
+            if price is None or max_amount is None:
+                continue
+            if float(max_amount) < min_cny_trade_amount:
+                continue
             prices.append(float(price))
-
-    if not prices:
-        raise RuntimeError("OKX P2P returned no usable USDT/CNY prices.")
-
-    return C2CPrice(source="okx", price=float(median(prices)))
+        except (TypeError, ValueError):
+            continue
+        if len(prices) >= sample_size:
+            break
+    return prices
