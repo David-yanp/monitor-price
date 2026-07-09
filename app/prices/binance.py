@@ -52,7 +52,7 @@ async def fetch_binance_c2c_price(
 
     if not prices:
         raise RuntimeError(
-            f"Binance P2P returned no ALIPAY USDT/CNY prices tradable at {min_cny_trade_amount:g} CNY without buyer limits."
+            f"Binance P2P returned no ALIPAY USDT/CNY prices with min order at least {min_cny_trade_amount:g} CNY without buyer limits."
         )
 
     return C2CPrice(source="binance", price=float(median(prices)))
@@ -86,10 +86,9 @@ def extract_binance_prices(
 
 def _is_binance_ad_tradable(adv: dict, cny_amount: float) -> bool:
     min_amount = _to_float(adv.get("minSingleTransAmount"))
-    max_amount = _to_float(adv.get("maxSingleTransAmount"))
-    if min_amount is None or max_amount is None:
+    if min_amount is None:
         return False
-    if not (min_amount <= cny_amount <= max_amount):
+    if min_amount < cny_amount:
         return False
     if adv.get("isTradable") is False:
         return False

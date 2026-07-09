@@ -42,7 +42,7 @@ async def fetch_okx_c2c_price(
     prices = extract_okx_prices(raw_items, sample_size, min_cny_trade_amount)
 
     if not prices:
-        raise RuntimeError(f"OKX P2P returned no ALIPAY USDT/CNY prices tradable at {min_cny_trade_amount:g} CNY without verification limits.")
+        raise RuntimeError(f"OKX P2P returned no ALIPAY USDT/CNY prices with min order at least {min_cny_trade_amount:g} CNY without verification limits.")
 
     return C2CPrice(source="okx", price=float(median(prices)))
 
@@ -72,10 +72,9 @@ def extract_okx_prices(
 
 def _is_okx_ad_tradable(item: dict, cny_amount: float) -> bool:
     min_amount = _to_float(item.get("quoteMinAmountPerOrder"))
-    max_amount = _to_float(item.get("quoteMaxAmountPerOrder"))
-    if min_amount is None or max_amount is None:
+    if min_amount is None:
         return False
-    if not (min_amount <= cny_amount <= max_amount):
+    if min_amount < cny_amount:
         return False
     if "aliPay" not in (item.get("paymentMethods") or []):
         return False

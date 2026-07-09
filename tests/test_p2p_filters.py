@@ -9,18 +9,18 @@ from app.prices.okx import extract_okx_prices
 
 
 class P2PFilterTests(unittest.TestCase):
-    def test_binance_filters_ads_that_cannot_trade_target_amount(self) -> None:
+    def test_binance_filters_ads_below_min_order_amount(self) -> None:
         rows = [
-            {"adv": self.binance_adv("6.70", "10", "50")},
-            {"adv": self.binance_adv("6.71", "5000", "10000")},
-            {"adv": self.binance_adv("6.72", "10", "3000")},
-            {"adv": self.binance_adv("6.74", "1000", "10000")},
-            {"adv": self.binance_adv("6.76", "2000", "20000")},
+            {"adv": self.binance_adv("6.70", "10", "999999")},
+            {"adv": self.binance_adv("6.72", "2999.99", "999999")},
+            {"adv": self.binance_adv("6.74", "3000", "3000")},
+            {"adv": self.binance_adv("6.76", "5000", "10000")},
+            {"adv": self.binance_adv("6.78", "8000", "1000")},
         ]
 
-        prices = extract_binance_prices(rows, sample_size=2, min_cny_trade_amount=3000)
+        prices = extract_binance_prices(rows, sample_size=3, min_cny_trade_amount=3000)
 
-        self.assertEqual(prices, [6.72, 6.74])
+        self.assertEqual(prices, [6.74, 6.76, 6.78])
 
     def test_binance_filters_ads_with_buyer_limits_or_non_alipay(self) -> None:
         rows = [
@@ -29,25 +29,25 @@ class P2PFilterTests(unittest.TestCase):
             {"adv": self.binance_adv("6.72", "10", "5000", buyerBtcPositionLimit="1")},
             {"adv": self.binance_adv("6.73", "10", "5000", takerAdditionalKycRequired=1)},
             {"adv": self.binance_adv("6.74", "10", "5000", pay_type="WECHAT")},
-            {"adv": self.binance_adv("6.75", "10", "5000")},
+            {"adv": self.binance_adv("6.75", "3000", "5000")},
         ]
 
         prices = extract_binance_prices(rows, sample_size=5, min_cny_trade_amount=3000)
 
         self.assertEqual(prices, [6.75])
 
-    def test_okx_filters_ads_that_cannot_trade_target_amount(self) -> None:
+    def test_okx_filters_ads_below_min_order_amount(self) -> None:
         items = [
-            self.okx_item("6.70", "10", "1000.00"),
-            self.okx_item("6.71", "5000", "10000.00"),
-            self.okx_item("6.72", "10", "3000.00"),
-            self.okx_item("6.74", "1000", "10000.00"),
-            self.okx_item("6.76", "2000", "20000.00"),
+            self.okx_item("6.70", "10", "999999.00"),
+            self.okx_item("6.72", "2999.99", "999999.00"),
+            self.okx_item("6.74", "3000", "3000.00"),
+            self.okx_item("6.76", "5000", "10000.00"),
+            self.okx_item("6.78", "8000", "1000.00"),
         ]
 
-        prices = extract_okx_prices(items, sample_size=2, min_cny_trade_amount=3000)
+        prices = extract_okx_prices(items, sample_size=3, min_cny_trade_amount=3000)
 
-        self.assertEqual(prices, [6.72, 6.74])
+        self.assertEqual(prices, [6.74, 6.76, 6.78])
 
     def test_okx_filters_ads_with_verification_limits_or_non_alipay(self) -> None:
         items = [
@@ -57,7 +57,7 @@ class P2PFilterTests(unittest.TestCase):
             self.okx_item("6.73", "10", "5000", safetyLimit=True),
             self.okx_item("6.74", "10", "5000", black=True),
             self.okx_item("6.75", "10", "5000", alreadyTraded=True),
-            self.okx_item("6.76", "10", "5000"),
+            self.okx_item("6.76", "3000", "5000"),
         ]
 
         prices = extract_okx_prices(items, sample_size=5, min_cny_trade_amount=3000)
