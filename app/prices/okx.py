@@ -42,7 +42,7 @@ async def fetch_okx_c2c_price(
     prices = extract_okx_prices(raw_items, sample_size, min_cny_trade_amount)
 
     if not prices:
-        raise RuntimeError(f"OKX P2P returned no USDT/CNY prices meeting min {min_cny_trade_amount:g} CNY single-order amount.")
+        raise RuntimeError(f"OKX P2P returned no ALIPAY USDT/CNY prices tradable at {min_cny_trade_amount:g} CNY without verification limits.")
 
     return C2CPrice(source="okx", price=float(median(prices)))
 
@@ -57,11 +57,10 @@ def extract_okx_prices(
         if not isinstance(item, dict):
             continue
         price = item.get("price") or item.get("quotePrice")
-        max_amount = item.get("quoteMaxAmountPerOrder")
         try:
-            if price is None or max_amount is None:
+            if price is None:
                 continue
-            if float(max_amount) < min_cny_trade_amount:
+            if not _is_okx_ad_tradable(item, min_cny_trade_amount):
                 continue
             prices.append(float(price))
         except (TypeError, ValueError):
@@ -69,3 +68,32 @@ def extract_okx_prices(
         if len(prices) >= sample_size:
             break
     return prices
+
+
+def _is_okx_ad_tradable(item: dict, cny_amount: float) -> bool:
+    min_amount = _to_float(item.get("quoteMinAmountPerOrder"))
+    max_amount = _to_float(item.get("quoteMaxAmountPerOrder"))
+    if min_amount is None or max_amount is None:
+        return False
+    if not (min_amount <= cny_amount <= max_amount):
+        return False
+    if "aliPay" not in (item.get("paymentMethods") or []):
+        return False
+    if item.get("verificationRequired") not in (False, None):
+        return False
+    if item.get("verificationType") not in (0, None):
+        return False
+    if item.get("safetyLimit") not in (False, None):
+        return False
+    if item.get("black") not in (False, None):
+        return False
+    if item.get("alreadyTraded") not in (False, None):
+        return False
+    return True
+
+
+def _to_float(value: object) -> float | None:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None

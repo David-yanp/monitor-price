@@ -28,6 +28,7 @@ prices.db
 *.sqlite3
 *.db-journal
 *.sqlite-journal
+*_latest_raw.json
 
 # Logs and process files
 *.log

@@ -8,6 +8,8 @@ from app.models import C2CPrice
 
 
 BINANCE_P2P_URL = "https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search"
+BINANCE_ROWS_PER_PAGE = 20
+BINANCE_MAX_PAGES = 5
 
 
 async def fetch_binance_c2c_price(
@@ -15,33 +17,42 @@ async def fetch_binance_c2c_price(
     sample_size: int,
     min_cny_trade_amount: float,
 ) -> C2CPrice:
-    payload = {
-        "page": 1,
-        "rows": max(sample_size * 3, sample_size, 10),
-        "payTypes": [],
-        "asset": "USDT",
-        "tradeType": "BUY",
-        "fiat": "CNY",
-        "publisherType": None,
-    }
     headers = {
         "content-type": "application/json",
         "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
     }
 
-    async with session.post(BINANCE_P2P_URL, json=payload, headers=headers) as response:
-        response.raise_for_status()
-        data = await response.json(content_type=None)
+    prices: list[float] = []
+    for page in range(1, BINANCE_MAX_PAGES + 1):
+        payload = {
+            "page": page,
+            "rows": BINANCE_ROWS_PER_PAGE,
+            "payTypes": ["ALIPAY"],
+            "asset": "USDT",
+            "tradeType": "BUY",
+            "fiat": "CNY",
+            "publisherType": None,
+        }
+        async with session.post(BINANCE_P2P_URL, json=payload, headers=headers) as response:
+            response.raise_for_status()
+            data = await response.json(content_type=None)
 
-    prices = extract_binance_prices(
-        data.get("data") or [],
-        sample_size,
-        min_cny_trade_amount,
-    )
+        rows = data.get("data") or []
+        if not rows:
+            break
+        prices.extend(
+            extract_binance_prices(
+                rows,
+                sample_size - len(prices),
+                min_cny_trade_amount,
+            )
+        )
+        if len(prices) >= sample_size:
+            break
 
     if not prices:
         raise RuntimeError(
-            f"Binance P2P returned no USDT/CNY prices meeting min {min_cny_trade_amount:g} CNY single-order amount."
+            f"Binance P2P returned no ALIPAY USDT/CNY prices tradable at {min_cny_trade_amount:g} CNY without buyer limits."
         )
 
     return C2CPrice(source="binance", price=float(median(prices)))
@@ -60,11 +71,10 @@ def extract_binance_prices(
         if not isinstance(adv, dict):
             continue
         price = adv.get("price")
-        max_amount = adv.get("maxSingleTransAmount")
         try:
-            if price is None or max_amount is None:
+            if price is None:
                 continue
-            if float(max_amount) < min_cny_trade_amount:
+            if not _is_binance_ad_tradable(adv, min_cny_trade_amount):
                 continue
             prices.append(float(price))
         except (TypeError, ValueError):
@@ -72,3 +82,37 @@ def extract_binance_prices(
         if len(prices) >= sample_size:
             break
     return prices
+
+
+def _is_binance_ad_tradable(adv: dict, cny_amount: float) -> bool:
+    min_amount = _to_float(adv.get("minSingleTransAmount"))
+    max_amount = _to_float(adv.get("maxSingleTransAmount"))
+    if min_amount is None or max_amount is None:
+        return False
+    if not (min_amount <= cny_amount <= max_amount):
+        return False
+    if adv.get("isTradable") is False:
+        return False
+    if adv.get("takerAdditionalKycRequired") not in (None, 0):
+        return False
+    for field in ("buyerKycLimit", "buyerRegDaysLimit", "buyerBtcPositionLimit"):
+        if adv.get(field) not in (None, ""):
+            return False
+    return _has_binance_pay_type(adv, "ALIPAY")
+
+
+def _has_binance_pay_type(adv: dict, pay_type: str) -> bool:
+    trade_methods = adv.get("tradeMethods")
+    if not isinstance(trade_methods, list):
+        return False
+    for method in trade_methods:
+        if isinstance(method, dict) and method.get("payType") == pay_type:
+            return True
+    return False
+
+
+def _to_float(value: object) -> float | None:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
