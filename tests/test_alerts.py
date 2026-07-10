@@ -26,7 +26,7 @@ class AlertTests(unittest.TestCase):
         self.assertIs(should_alert(snapshot, 0.04), False)
 
     def test_diff_key_uses_display_precision(self) -> None:
-        self.assertEqual(diff_key(0.074152139), "0.0742")
+        self.assertEqual(diff_key(0.074152139), "0.07")
 
 
 if __name__ == "__main__":

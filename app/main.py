@@ -111,7 +111,7 @@ class PriceMonitorApp:
             f"当前预警 chat_id: {alert_chat_id or '未配置'}",
             f"每日通知时间段: {notify_window}",
             f"检查频率: {format_interval(interval_seconds)}",
-            f"阈值: {self.settings.price_diff_threshold:.4f}",
+            f"阈值: {self.settings.price_diff_threshold:.2f}",
         ]
         if include_hint and not alert_chat_id:
             lines.append("请在需要接收预警的会话里发送 /setalert。")
@@ -181,7 +181,7 @@ class PriceMonitorApp:
                 alert_sent,
             )
             logger.info(
-                "Recorded price check: sources=%s usd_cny=%.4f max_diff=%.4f alert=%s",
+                "Recorded price check: sources=%s usd_cny=%.2f max_diff=%.2f alert=%s",
                 ",".join(quote.source for quote in snapshot.quotes),
                 snapshot.usd_cny_rate,
                 snapshot.diff,

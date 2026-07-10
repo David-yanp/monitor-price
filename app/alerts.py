@@ -16,7 +16,7 @@ def alertable_quotes(snapshot: PriceSnapshot, threshold: float) -> tuple[Exchang
 
 
 def diff_key(diff: float) -> str:
-    return f"{diff:.4f}"
+    return f"{diff:.2f}"
 
 
 def format_snapshot(snapshot: PriceSnapshot, threshold: float) -> str:
@@ -24,13 +24,13 @@ def format_snapshot(snapshot: PriceSnapshot, threshold: float) -> str:
     table_lines = ["交易所        C2C      价差  状态"]
     for quote in snapshot.quotes:
         status = "ALERT" if quote.diff > threshold else "OK"
-        table_lines.append(f"{quote.source.upper():<8} {quote.price:>8.4f}  {quote.diff:>8.4f}  {status}")
+        table_lines.append(f"{quote.source.upper():<8} {quote.price:>8.2f}  {quote.diff:>6.2f}  {status}")
 
     lines = [
         "当前价格差",
         f"时间: {local_time}",
-        f"Google USD/CNY: {snapshot.usd_cny_rate:.4f}",
-        f"阈值: {threshold:.4f}",
+        f"Google USD/CNY: {snapshot.usd_cny_rate:.2f}",
+        f"阈值: {threshold:.2f}",
         "",
         f"<pre>{escape(chr(10).join(table_lines))}</pre>",
     ]

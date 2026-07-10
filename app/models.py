@@ -4,6 +4,9 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 
+PRICE_DECIMAL_PLACES = 2
+
+
 @dataclass(frozen=True)
 class ExchangeQuote:
     source: str
@@ -20,14 +23,18 @@ class PriceSnapshot:
 
     @classmethod
     def create(cls, c2c_prices: tuple["C2CPrice", ...], usd_cny_rate: float) -> "PriceSnapshot":
+        rounded_usd_cny_rate = round(usd_cny_rate, PRICE_DECIMAL_PLACES)
         return cls(
             checked_at=datetime.now(timezone.utc),
-            usd_cny_rate=usd_cny_rate,
+            usd_cny_rate=rounded_usd_cny_rate,
             quotes=tuple(
                 ExchangeQuote(
                     source=c2c_price.source,
-                    price=c2c_price.price,
-                    diff=abs(c2c_price.price - usd_cny_rate),
+                    price=round(c2c_price.price, PRICE_DECIMAL_PLACES),
+                    diff=round(
+                        abs(round(c2c_price.price, PRICE_DECIMAL_PLACES) - rounded_usd_cny_rate),
+                        PRICE_DECIMAL_PLACES,
+                    ),
                 )
                 for c2c_price in c2c_prices
             ),
