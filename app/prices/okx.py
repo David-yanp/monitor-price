@@ -5,6 +5,7 @@ from statistics import median
 import aiohttp
 
 from app.models import C2CPrice
+from app.prices.errors import PriceProviderError
 
 
 OKX_P2P_URL = "https://www.okx.com/v3/c2c/tradingOrders/books"
@@ -14,7 +15,7 @@ async def fetch_okx_c2c_price(
     session: aiohttp.ClientSession,
     sample_size: int,
     min_cny_trade_amount: float,
-) -> C2CPrice:
+) -> tuple[C2CPrice, int]:
     params = {
         "quoteCurrency": "CNY",
         "baseCurrency": "USDT",
@@ -32,19 +33,23 @@ async def fetch_okx_c2c_price(
     async with session.get(OKX_P2P_URL, params=params, headers=headers) as response:
         response.raise_for_status()
         data = await response.json(content_type=None)
+        http_status = response.status
 
     raw_items = data.get("data")
     if isinstance(raw_items, dict):
         raw_items = raw_items.get("sell") or raw_items.get("asks") or raw_items.get("items")
     if not isinstance(raw_items, list):
-        raise RuntimeError("OKX P2P returned an unexpected response shape.")
+        raise PriceProviderError("OKX P2P returned an unexpected response shape.", http_status=http_status)
 
     prices = extract_okx_prices(raw_items, sample_size, min_cny_trade_amount)
 
     if not prices:
-        raise RuntimeError(f"OKX P2P returned no ALIPAY USDT/CNY prices with min order at least {min_cny_trade_amount:g} CNY without verification limits.")
+        raise PriceProviderError(
+            f"OKX P2P returned no ALIPAY USDT/CNY prices with min order at least {min_cny_trade_amount:g} CNY without verification limits.",
+            http_status=http_status,
+        )
 
-    return C2CPrice(source="okx", price=float(median(prices)))
+    return C2CPrice(source="okx", price=float(median(prices))), http_status
 
 
 def extract_okx_prices(

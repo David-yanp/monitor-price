@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 import sqlite3
 
-from app.models import PriceSnapshot
+from app.models import PriceSnapshot, ProviderFetchStatus
 
 
 SCHEMA = """
@@ -35,6 +35,22 @@ CREATE TABLE IF NOT EXISTS app_settings (
     value TEXT NOT NULL,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS price_fetch_statuses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    price_check_id INTEGER NOT NULL,
+    provider TEXT NOT NULL,
+    success INTEGER NOT NULL,
+    http_status INTEGER,
+    elapsed_ms INTEGER NOT NULL,
+    retry_count INTEGER NOT NULL DEFAULT 0,
+    error TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (price_check_id) REFERENCES price_checks(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_price_fetch_statuses_check_id
+ON price_fetch_statuses(price_check_id);
 """
 
 
@@ -56,14 +72,16 @@ class PriceStore:
         snapshot: PriceSnapshot,
         threshold: float,
         alert_sent: bool,
+        fetch_statuses: tuple[ProviderFetchStatus, ...] = (),
     ) -> None:
-        self._record_success_sync(snapshot, threshold, alert_sent)
+        self._record_success_sync(snapshot, threshold, alert_sent, fetch_statuses)
 
     def _record_success_sync(
         self,
         snapshot: PriceSnapshot,
         threshold: float,
         alert_sent: bool,
+        fetch_statuses: tuple[ProviderFetchStatus, ...],
     ) -> None:
         with sqlite3.connect(self.database_path) as conn:
             cursor = conn.execute(
@@ -94,6 +112,7 @@ class PriceStore:
                     for quote in snapshot.quotes
                 ),
             )
+            self._insert_fetch_statuses(conn, price_check_id, fetch_statuses)
             conn.commit()
 
     async def get_setting(self, key: str) -> str | None:
@@ -123,14 +142,24 @@ class PriceStore:
             )
             conn.commit()
 
-    async def record_error(self, threshold: float, error: str) -> None:
-        self._record_error_sync(threshold, error)
+    async def record_error(
+        self,
+        threshold: float,
+        error: str,
+        fetch_statuses: tuple[ProviderFetchStatus, ...] = (),
+    ) -> None:
+        self._record_error_sync(threshold, error, fetch_statuses)
 
-    def _record_error_sync(self, threshold: float, error: str) -> None:
+    def _record_error_sync(
+        self,
+        threshold: float,
+        error: str,
+        fetch_statuses: tuple[ProviderFetchStatus, ...],
+    ) -> None:
         from datetime import datetime, timezone
 
         with sqlite3.connect(self.database_path) as conn:
-            conn.execute(
+            cursor = conn.execute(
                 """
                 INSERT INTO price_checks (
                     checked_at, threshold, alert_sent, error
@@ -138,4 +167,31 @@ class PriceStore:
                 """,
                 (datetime.now(timezone.utc).isoformat(), threshold, error[:1000]),
             )
+            self._insert_fetch_statuses(conn, int(cursor.lastrowid), fetch_statuses)
             conn.commit()
+
+    def _insert_fetch_statuses(
+        self,
+        conn: sqlite3.Connection,
+        price_check_id: int,
+        fetch_statuses: tuple[ProviderFetchStatus, ...],
+    ) -> None:
+        conn.executemany(
+            """
+            INSERT INTO price_fetch_statuses (
+                price_check_id, provider, success, http_status, elapsed_ms, retry_count, error
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                (
+                    price_check_id,
+                    status.provider,
+                    1 if status.success else 0,
+                    status.http_status,
+                    status.elapsed_ms,
+                    status.retry_count,
+                    status.error[:1000] if status.error else None,
+                )
+                for status in fetch_statuses
+            ),
+        )

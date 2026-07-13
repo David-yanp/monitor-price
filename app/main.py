@@ -157,8 +157,31 @@ class PriceMonitorApp:
 
     async def run_once(self) -> None:
         alert_sent = False
+        fetch_statuses = ()
         try:
-            snapshot = await self.price_service.fetch_snapshot()
+            fetch_result = await self.price_service.fetch_result()
+            fetch_statuses = fetch_result.statuses
+            for status in fetch_statuses:
+                if not status.success:
+                    logger.warning(
+                        "Provider fetch failed: provider=%s http_status=%s elapsed_ms=%s retry_count=%s error=%s",
+                        status.provider,
+                        status.http_status,
+                        status.elapsed_ms,
+                        status.retry_count,
+                        status.error,
+                    )
+            if fetch_result.snapshot is None:
+                error = fetch_result.error or "Price fetch failed."
+                logger.error("Price monitor check failed: %s", error)
+                await self.store.record_error(
+                    self.settings.price_diff_threshold,
+                    error,
+                    fetch_statuses,
+                )
+                return
+
+            snapshot = fetch_result.snapshot
             changed_quotes = await self.changed_alert_quotes(snapshot)
             if changed_quotes:
                 alert_chat_id = await self.get_alert_chat_id()
@@ -179,6 +202,7 @@ class PriceMonitorApp:
                 snapshot,
                 self.settings.price_diff_threshold,
                 alert_sent,
+                fetch_statuses,
             )
             logger.info(
                 "Recorded price check: sources=%s usd_cny=%.2f max_diff=%.2f alert=%s",
@@ -189,7 +213,11 @@ class PriceMonitorApp:
             )
         except Exception as exc:
             logger.exception("Price monitor check failed.")
-            await self.store.record_error(self.settings.price_diff_threshold, str(exc))
+            await self.store.record_error(
+                self.settings.price_diff_threshold,
+                str(exc),
+                fetch_statuses,
+            )
 
     async def changed_alert_quotes(self, snapshot):
         changed = []

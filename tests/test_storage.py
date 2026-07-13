@@ -5,7 +5,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from app.models import ExchangeQuote, PriceSnapshot
+from app.models import ExchangeQuote, PriceSnapshot, ProviderFetchStatus
 from app.storage import PriceStore
 
 
@@ -25,7 +25,15 @@ class StorageTests(unittest.TestCase):
 
             async def run() -> None:
                 await store.init()
-                await store.record_success(snapshot, threshold=0.04, alert_sent=True)
+                await store.record_success(
+                    snapshot,
+                    threshold=0.04,
+                    alert_sent=True,
+                    fetch_statuses=(
+                        ProviderFetchStatus("binance", True, 200, 120, 0),
+                        ProviderFetchStatus("okx", False, 429, 860, 1, "rate limited"),
+                    ),
+                )
 
             asyncio.run(run())
 
@@ -40,6 +48,20 @@ class StorageTests(unittest.TestCase):
             ).fetchall()
 
             self.assertEqual(rows, [("binance", 7.25, 0.05), ("okx", 7.24, 0.04)])
+            fetch_rows = conn.execute(
+                """
+                SELECT provider, success, http_status, elapsed_ms, retry_count, error
+                FROM price_fetch_statuses ORDER BY provider
+                """
+            ).fetchall()
+
+            self.assertEqual(
+                fetch_rows,
+                [
+                    ("binance", 1, 200, 120, 0, None),
+                    ("okx", 0, 429, 860, 1, "rate limited"),
+                ],
+            )
 
     def test_store_records_error(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -48,7 +70,13 @@ class StorageTests(unittest.TestCase):
 
             async def run() -> None:
                 await store.init()
-                await store.record_error(threshold=0.04, error="network failed")
+                await store.record_error(
+                    threshold=0.04,
+                    error="network failed",
+                    fetch_statuses=(
+                        ProviderFetchStatus("google", False, 503, 1250, 1, "network failed"),
+                    ),
+                )
 
             asyncio.run(run())
 
@@ -56,6 +84,10 @@ class StorageTests(unittest.TestCase):
                 row = conn.execute("SELECT threshold, alert_sent, error FROM price_checks").fetchone()
 
             self.assertEqual(row, (0.04, 0, "network failed"))
+            fetch_row = conn.execute(
+                "SELECT provider, success, http_status, elapsed_ms, retry_count, error FROM price_fetch_statuses"
+            ).fetchone()
+            self.assertEqual(fetch_row, ("google", 0, 503, 1250, 1, "network failed"))
 
     def test_store_persists_settings(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:

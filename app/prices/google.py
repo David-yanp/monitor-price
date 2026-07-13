@@ -4,6 +4,8 @@ import re
 
 import aiohttp
 
+from app.prices.errors import PriceProviderError
+
 
 GOOGLE_FINANCE_URL = "https://www.google.com/finance/quote/USD-CNY"
 
@@ -16,7 +18,7 @@ PRICE_PATTERNS = (
 )
 
 
-async def fetch_google_usd_cny_rate(session: aiohttp.ClientSession) -> float:
+async def fetch_google_usd_cny_rate(session: aiohttp.ClientSession) -> tuple[float, int]:
     headers = {
         "accept-language": "en-US,en;q=0.9",
         "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
@@ -24,8 +26,12 @@ async def fetch_google_usd_cny_rate(session: aiohttp.ClientSession) -> float:
     async with session.get(GOOGLE_FINANCE_URL, headers=headers) as response:
         response.raise_for_status()
         text = await response.text()
+        http_status = response.status
 
-    return parse_google_usd_cny_rate(text)
+    try:
+        return parse_google_usd_cny_rate(text), http_status
+    except RuntimeError as exc:
+        raise PriceProviderError(str(exc), http_status=http_status) from exc
 
 
 def parse_google_usd_cny_rate(text: str) -> float:

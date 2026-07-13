@@ -5,7 +5,7 @@ import unittest
 
 from app.config import Settings
 from app.main import PriceMonitorApp
-from app.models import ExchangeQuote, PriceSnapshot
+from app.models import ExchangeQuote, PriceFetchResult, PriceSnapshot
 
 
 class AlertDedupeTests(unittest.IsolatedAsyncioTestCase):
@@ -59,8 +59,8 @@ class AlertDedupeTests(unittest.IsolatedAsyncioTestCase):
         )
 
         class FakePriceService:
-            async def fetch_snapshot(self):
-                return snapshot
+            async def fetch_result(self):
+                return PriceFetchResult(snapshot=snapshot, statuses=())
 
             async def close(self):
                 return None

@@ -61,3 +61,20 @@ class PriceSnapshot:
 class C2CPrice:
     source: str
     price: float
+
+
+@dataclass(frozen=True)
+class ProviderFetchStatus:
+    provider: str
+    success: bool
+    http_status: int | None
+    elapsed_ms: int
+    retry_count: int
+    error: str | None = None
+
+
+@dataclass(frozen=True)
+class PriceFetchResult:
+    snapshot: PriceSnapshot | None
+    statuses: tuple[ProviderFetchStatus, ...]
+    error: str | None = None
