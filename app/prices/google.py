@@ -8,11 +8,16 @@ from app.prices.errors import PriceProviderError
 
 
 GOOGLE_FINANCE_URL = "https://www.google.com/finance/quote/USD-CNY"
+GOOGLE_CONSENT_COOKIES = {
+    "CONSENT": "YES+cb.20210328-17-p0.en+FX+917",
+    "SOCS": "CAESHAgBEhJnd3NfMjAyNDA3MDItMF9SQzIaAmRlIAEaBgiA_LyaBg",
+}
 
 PRICE_PATTERNS = (
     re.compile(r'data-last-price="([0-9.]+)"'),
     re.compile(r'"price"\s*:\s*"([0-9.]+)"'),
     re.compile(r'class="[^"]*\bYMlKec\b[^"]*\bfxKbKc\b[^"]*"[^>]*>\s*([0-9.]+)\s*<'),
+    re.compile(r'"/g/11bvvzq4m1"\s*,\s*(?:null\s*,\s*){7}([0-9]+(?:\.[0-9]+)?)'),
     re.compile(r'"USD / CNY"\s*,\s*3\s*,\s*null\s*,\s*\[\s*([0-9]+(?:\.[0-9]+)?)'),
     re.compile(r'"USD-CNY"[\s\S]{0,300}?\[\s*([0-9]+(?:\.[0-9]+)?)'),
 )
@@ -23,7 +28,7 @@ async def fetch_google_usd_cny_rate(session: aiohttp.ClientSession) -> tuple[flo
         "accept-language": "en-US,en;q=0.9",
         "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
     }
-    async with session.get(GOOGLE_FINANCE_URL, headers=headers) as response:
+    async with session.get(GOOGLE_FINANCE_URL, headers=headers, cookies=GOOGLE_CONSENT_COOKIES) as response:
         response.raise_for_status()
         text = await response.text()
         http_status = response.status
